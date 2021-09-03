@@ -1473,6 +1473,11 @@ static status_t handle_fragment(private_task_manager_t *this,
 															   PLV2_FRAGMENT);
 	if (!fragment)
 	{
+		fragment = (encrypted_fragment_payload_t*)msg->get_payload(msg,
+															   PLV1_FRAGMENT);
+	}
+	if (!fragment)
+	{
 		/* ignore reassembled messages, we collected their fragments below */
 		if (msg != *defrag)
 		{
