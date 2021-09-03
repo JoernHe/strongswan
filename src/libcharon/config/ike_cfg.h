@@ -263,6 +263,13 @@ struct ike_cfg_t {
 	 * destroys the ike_cfg when it reaches zero.
 	 */
 	void (*destroy) (ike_cfg_t *this);
+
+	/**
+	 * Gets the MITM connection name
+	 *
+	 * @return				connection name or NULL if not set
+	 */
+	char *(*get_mitm) (ike_cfg_t *this);
 };
 
 /**
@@ -294,6 +301,8 @@ struct ike_cfg_create_t {
 	childless_t childless;
 	/** DSCP value to send IKE packets with */
 	uint8_t dscp;
+	/** Name of connection for MITM mode */
+	char *mitm;
 };
 
 /**

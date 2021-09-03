@@ -58,6 +58,7 @@ enum kw_token_t {
 	KW_REAUTH,
 	KW_IKE,
 	KW_ESP,
+	KW_MITM,
 	KW_AH,
 	KW_DPDDELAY,
 	KW_DPDTIMEOUT,

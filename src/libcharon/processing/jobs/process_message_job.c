@@ -36,11 +36,46 @@ struct private_process_message_job_t {
 	message_t *message;
 };
 
+/**
+ * get the child_cfg with the same name as the peer cfg
+ */
+static child_cfg_t* get_child_from_peer(peer_cfg_t *peer_cfg, char *name)
+{
+	child_cfg_t *current, *found = NULL;
+	enumerator_t *enumerator;
+
+	enumerator = peer_cfg->create_child_cfg_enumerator(peer_cfg);
+	while (enumerator->enumerate(enumerator, &current))
+	{
+		if (streq(current->get_name(current), name))
+		{
+			found = current;
+			found->get_ref(found);
+			break;
+		}
+	}
+	enumerator->destroy(enumerator);
+	return found;
+}
+
 METHOD(job_t, destroy, void,
 	private_process_message_job_t *this)
 {
 	this->message->destroy(this->message);
 	free(this);
+}
+
+bool initiate_cb(void* param, debug_t group, level_t level, ike_sa_t* ike_sa, const char *message)
+{
+	ike_sa_t *mitm_ike_sa = (ike_sa_t *)param;
+	if (ike_sa && mitm_ike_sa)
+	{
+		ike_sa->set_mitm(ike_sa, mitm_ike_sa);
+		mitm_ike_sa->set_mitm(mitm_ike_sa, ike_sa);
+		return TRUE;
+	}
+
+	return FALSE;
 }
 
 METHOD(job_t, execute, job_requeue_t,
@@ -72,10 +107,32 @@ METHOD(job_t, execute, job_requeue_t,
 			 this->message->get_source(this->message),
 			 this->message->get_destination(this->message),
 			 this->message->get_packet_data(this->message).len);
-		if (ike_sa->process_message(ike_sa, this->message) == DESTROY_ME)
+		status_t ret = ike_sa->process_message(ike_sa, this->message);
+		if (ret == DESTROY_ME)
 		{
-			charon->ike_sa_manager->checkin_and_destroy(charon->ike_sa_manager,
-														ike_sa);
+			charon->ike_sa_manager->checkin_and_destroy(charon->ike_sa_manager, ike_sa);
+		}
+		else if (ret == SUCCESS && this->message->get_exchange_type(this->message) == IKE_SA_INIT)
+		{
+			charon->ike_sa_manager->checkin(charon->ike_sa_manager, ike_sa);
+			ike_cfg_t *ike_cfg = ike_sa->get_ike_cfg(ike_sa);
+			if (ike_cfg)
+			{
+				char *mitm = ike_cfg->get_mitm(ike_cfg);
+				if (mitm)
+				{
+					peer_cfg_t *mitm_peer_cfg = charon->backends->get_peer_cfg_by_name(charon->backends, mitm);
+					if (mitm_peer_cfg)
+					{
+						child_cfg_t *mitm_child_cfg = get_child_from_peer(mitm_peer_cfg, mitm_peer_cfg->get_name(mitm_peer_cfg));
+						if (mitm_child_cfg)
+						{
+							DBG1(DBG_IKE, "MITM starting connection '%s'", mitm);
+							charon->controller->initiate(charon->controller, mitm_peer_cfg, mitm_child_cfg, &initiate_cb, ike_sa, 0, FALSE);
+						}
+					}
+				}
+			}
 		}
 		else
 		{

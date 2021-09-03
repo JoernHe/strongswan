@@ -428,6 +428,13 @@ struct message_t {
 	 * Destroys a message and all including objects.
 	 */
 	void (*destroy) (message_t *this);
+
+	/**
+	 * Sets whether or not the payloads are cloned
+	 *
+	 * @param cloned		Whether or not the payloads were cloned from another message
+	 */
+	void (*set_payloads_cloned) (message_t *this, bool cloned);
 };
 
 /**

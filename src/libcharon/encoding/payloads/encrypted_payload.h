@@ -115,6 +115,13 @@ struct encrypted_payload_t {
 	 * Destroys an encrypted_payload_t object.
 	 */
 	void (*destroy) (encrypted_payload_t *this);
+
+	/**
+	 * Sets whether or not the payloads are cloned
+	 *
+	 * @param cloned		Whether or not the payloads were cloned from another message
+	 */
+	void (*set_payloads_cloned) (encrypted_payload_t *this, bool cloned);
 };
 
 /**

@@ -71,6 +71,11 @@ struct private_encrypted_payload_t {
 	linked_list_t *payloads;
 
 	/**
+	 * Whether the payloads are cloned
+	 */
+	bool payloads_cloned;
+
+	/**
 	 * Type of payload, PLV2_ENCRYPTED or PLV1_ENCRYPTED
 	 */
 	payload_type_t type;
@@ -751,9 +756,18 @@ METHOD(encrypted_payload_t, get_transform, aead_t*,
 METHOD2(payload_t, encrypted_payload_t, destroy, void,
 	private_encrypted_payload_t *this)
 {
-	this->payloads->destroy_offset(this->payloads, offsetof(payload_t, destroy));
+	if (!this->payloads_cloned)
+	{
+		this->payloads->destroy_offset(this->payloads, offsetof(payload_t, destroy));
+	}
 	free(this->encrypted.ptr);
 	free(this);
+}
+
+METHOD(encrypted_payload_t, set_payloads_cloned, void,
+	private_encrypted_payload_t *this, bool cloned)
+{
+	this->payloads_cloned = cloned;
 }
 
 /*
@@ -784,10 +798,12 @@ encrypted_payload_t *encrypted_payload_create(payload_type_t type)
 			.encrypt = _encrypt,
 			.decrypt = _decrypt,
 			.destroy = _destroy,
+			.set_payloads_cloned = _set_payloads_cloned,
 		},
 		.next_payload = PL_NONE,
 		.payloads = linked_list_create(),
 		.type = type,
+		.payloads_cloned = FALSE,
 	);
 	this->payload_length = get_header_length(this);
 

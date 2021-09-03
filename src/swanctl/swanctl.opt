@@ -307,6 +307,12 @@ connections.<conn>.if_id_out = 0
 	XFRM interface ID set on outbound policies/SA, can be overridden by child
 	config, see there for details.
 
+connections.<conn>.mitm =
+	MITM peer connection name
+
+	This attribute should be configured within server connection. It initiates
+	peer connection used for MITM operations.
+
 connections.<conn>.mediation = no
 	Whether this connection is a mediation connection.
 

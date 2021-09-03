@@ -156,6 +156,7 @@ struct starter_conn {
 		char            *esp;
 		char            *ah;
 		char            *ike;
+		char		*mitm;
 
 		time_t          dpd_delay;
 		time_t          dpd_timeout;

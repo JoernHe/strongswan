@@ -958,9 +958,19 @@ struct private_message_t {
 	fragment_data_t *frag;
 
 	/**
+	 * Whether the payloads are cloned
+	 */
+	bool payloads_cloned;
+
+	/**
 	 * The fragment ID
 	 */
 	uint16_t frag_id;
+
+	/**
+	 * The last generated_encrypted payloads
+	 */
+	encrypted_payload_t *last_gen_encrypted_payload;
 };
 
 /**
@@ -1180,6 +1190,12 @@ METHOD(message_t, add_payload, void,
 		 payload_type_names, payload->get_type(payload));
 }
 
+METHOD(message_t, set_payloads_cloned, void,
+	private_message_t *this, bool cloned)
+{
+	this->payloads_cloned = cloned;
+}
+
 METHOD(message_t, add_notify, void,
 	private_message_t *this, bool flush, notify_type_t type, chunk_t data)
 {
@@ -1191,7 +1207,10 @@ METHOD(message_t, add_notify, void,
 		while (this->payloads->remove_last(this->payloads,
 												(void**)&payload) == SUCCESS)
 		{
-			payload->destroy(payload);
+			if (!this->payloads_cloned)
+			{
+				payload->destroy(payload);
+			}
 		}
 	}
 	if (this->major_version == IKEV2_MAJOR_VERSION)
@@ -1598,6 +1617,8 @@ static encrypted_payload_t* wrap_payloads(private_message_t *this)
 	{
 		encrypted = encrypted_payload_create(PLV2_ENCRYPTED);
 	}
+	this->last_gen_encrypted_payload = encrypted;
+	encrypted->set_payloads_cloned(encrypted, this->payloads_cloned);
 	while (payloads->remove_first(payloads, (void**)&current) == SUCCESS)
 	{
 		payload_rule_t *rule;
@@ -1921,6 +1942,7 @@ static message_t *clone_message(private_message_t *this)
 	message->set_exchange_type(message, this->exchange_type);
 	memcpy(((private_message_t*)message)->reserved, this->reserved,
 		   sizeof(this->reserved));
+	message->set_payloads_cloned(message, this->payloads_cloned);
 	return message;
 }
 
@@ -3001,7 +3023,15 @@ METHOD(message_t, destroy, void,
 {
 	DESTROY_IF(this->ike_sa_id);
 	DESTROY_IF(this->parser);
-	this->payloads->destroy_offset(this->payloads, offsetof(payload_t, destroy));
+	if (!this->payloads_cloned)
+	{
+		this->payloads->destroy_offset(this->payloads, offsetof(payload_t, destroy));
+	}
+	else
+	{
+		DESTROY_IF(this->last_gen_encrypted_payload);
+	}
+
 	this->packet->destroy(this->packet);
 	if (this->frag)
 	{
@@ -3066,6 +3096,7 @@ message_t *message_create_from_packet(packet_t *packet)
 			.get_metadata = _get_metadata,
 			.set_metadata = _set_metadata,
 			.destroy = _destroy,
+			.set_payloads_cloned = _set_payloads_cloned,
 		},
 		.exchange_type = EXCHANGE_TYPE_UNDEFINED,
 		.is_request = TRUE,
@@ -3073,8 +3104,10 @@ message_t *message_create_from_packet(packet_t *packet)
 		.packet = packet,
 		.payloads = linked_list_create(),
 		.parser = parser_create(packet->get_data(packet)),
+		.payloads_cloned = FALSE,
 		.message_id = 0,
 		.frag_id = 0,
+		.last_gen_encrypted_payload = NULL,
 	);
 
 	return &this->public;

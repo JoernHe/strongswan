@@ -318,6 +318,16 @@ struct private_ike_sa_t {
 	 * Outbound interface ID
 	 */
 	uint32_t if_id_out;
+
+	/**
+	 * The next exchange state
+	 */
+	exchange_type_t next_exchange_state;
+
+	/**
+	 * The MITM IKE SA
+	 */
+	ike_sa_t *mitm;
 };
 
 /**
@@ -359,6 +369,18 @@ static time_t get_use_time(private_ike_sa_t* this, bool inbound)
 	enumerator->destroy(enumerator);
 
 	return use_time;
+}
+
+METHOD(ike_sa_t, get_next_exchange_state, exchange_type_t,
+	private_ike_sa_t *this)
+{
+	return this->next_exchange_state;
+}
+
+METHOD(ike_sa_t, set_next_exchange_state, void,
+	private_ike_sa_t *this, exchange_type_t state)
+{
+	this->next_exchange_state = state;
 }
 
 METHOD(ike_sa_t, get_unique_id, uint32_t,
@@ -861,6 +883,12 @@ METHOD(ike_sa_t, send_dpd, status_t,
 		return this->task_manager->initiate(this->task_manager);
 	}
 	return SUCCESS;
+}
+
+METHOD(ike_sa_t, get_task_manager, task_manager_t*,
+	private_ike_sa_t *this)
+{
+	return this->task_manager;
 }
 
 METHOD(ike_sa_t, get_state, ike_sa_state_t,
@@ -3038,6 +3066,13 @@ METHOD(ike_sa_t, destroy, void,
 	attribute_entry_t entry;
 	child_sa_t *child_sa;
 	host_t *vip;
+	if (this->mitm)
+	{
+		ike_sa_t *mitm = this->mitm;
+		this->mitm->set_mitm(this->mitm, NULL);
+		this->mitm = NULL;
+		charon->controller->terminate_ike(charon->controller, mitm->get_unique_id(mitm), TRUE, NULL, NULL, 0);
+	}
 
 	charon->bus->set_sa(charon->bus, &this->public);
 
@@ -3130,6 +3165,18 @@ METHOD(ike_sa_t, destroy, void,
 
 	this->ike_sa_id->destroy(this->ike_sa_id);
 	free(this);
+}
+
+METHOD(ike_sa_t, get_mitm, ike_sa_t *,
+	private_ike_sa_t *this)
+{
+	return this->mitm;
+}
+
+METHOD(ike_sa_t, set_mitm, void,
+	private_ike_sa_t *this, ike_sa_t *mitm)
+{
+	this->mitm = mitm;
 }
 
 /*
@@ -3247,6 +3294,11 @@ ike_sa_t * ike_sa_create(ike_sa_id_t *ike_sa_id, bool initiator,
 			.callback = _callback,
 			.respond = _respond,
 #endif /* ME */
+			.get_task_manager = _get_task_manager,
+			.get_next_exchange_state = _get_next_exchange_state,
+			.set_next_exchange_state = _set_next_exchange_state,
+			.get_mitm = _get_mitm,
+			.set_mitm = _set_mitm,
 		},
 		.ike_sa_id = ike_sa_id->clone(ike_sa_id),
 		.version = version,
@@ -3277,6 +3329,8 @@ ike_sa_t * ike_sa_create(ike_sa_id_t *ike_sa_id, bool initiator,
 								"%s.fragment_size", 1280, lib->ns),
 		.follow_redirects = lib->settings->get_bool(lib->settings,
 								"%s.follow_redirects", TRUE, lib->ns),
+		.next_exchange_state = IKE_SA_INIT,
+		.mitm = NULL,
 	);
 
 	if (version == IKEV2)

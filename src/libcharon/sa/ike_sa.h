@@ -1270,6 +1270,41 @@ struct ike_sa_t {
 	 * Destroys a ike_sa_t object.
 	 */
 	void (*destroy) (ike_sa_t *this);
+
+	/**
+	 * Gets the task manager
+	 *
+	 * @return			The valid task manager
+	 */
+	task_manager_t *(*get_task_manager) (ike_sa_t *this);
+
+	/**
+	 * Gets the next exchange state
+	 *
+	 * @return			The next exchange state
+	 */
+	exchange_type_t (*get_next_exchange_state) (ike_sa_t *this);
+
+	/**
+	 * Sets the next echange state
+	 *
+	 * @param state			The next exchange state
+	 */
+	void (*set_next_exchange_state) (ike_sa_t *this, exchange_type_t state);
+
+	/**
+	 * Gets the MITM IKE SA
+	 *
+	 * @return			The MITM IKE SA, NULL if not set
+	 */
+	ike_sa_t *(*get_mitm)(ike_sa_t *this);
+
+	/**
+	 * Sets the MITM IKE SA
+	 *
+	 * @param mitm			The MITM IKE SA
+	 */
+	void (*set_mitm)(ike_sa_t *this, ike_sa_t* mitm);
 };
 
 /**

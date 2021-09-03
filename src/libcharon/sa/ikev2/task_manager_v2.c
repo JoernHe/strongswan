@@ -200,6 +200,16 @@ struct private_task_manager_t {
 	 * Use make-before-break instead of break-before-make reauth?
 	 */
 	bool make_before_break;
+
+	/**
+	 * Whether or not to send build packets
+	 */
+	bool do_not_send_packets;
+
+	/**
+	 * The last generated message
+	 */
+	message_t* last_generated_msg;
 };
 
 /**
@@ -354,6 +364,11 @@ static bool generate_message(private_task_manager_t *this, message_t *message,
 METHOD(task_manager_t, retransmit, status_t,
 	private_task_manager_t *this, uint32_t message_id)
 {
+	if (this->do_not_send_packets)
+	{
+		return SUCCESS;
+	}
+
 	if (message_id == this->initiating.mid &&
 		array_count(this->initiating.packets))
 	{
@@ -737,6 +752,13 @@ METHOD(task_manager_t, initiate, status_t,
 		return initiate(this);
 	}
 
+	if (this->do_not_send_packets)
+	{
+		DESTROY_IF(this->last_generated_msg);
+		this->last_generated_msg = message;
+		return SUCCESS;
+	}
+
 	result = generate_message(this, message, &this->initiating.packets);
 
 	if (result)
@@ -785,6 +807,216 @@ METHOD(task_manager_t, initiate, status_t,
 }
 
 /**
+ * Copy a message to MITM IKE SA
+ *
+ * @param origmsg	The original message
+ */
+static status_t copy_message(private_task_manager_t *this, message_t *origmsg)
+{
+	enumerator_t *enumerator;
+	message_t *msg;
+	host_t *me, *other;
+	bool result;
+	payload_t *payload;
+
+	ike_sa_t* mitm_ike_sa = this->ike_sa->get_mitm(this->ike_sa);
+	if (!mitm_ike_sa)
+	{
+		return DESTROY_ME;
+	}
+
+	me = mitm_ike_sa->get_my_host(mitm_ike_sa);
+	other = mitm_ike_sa->get_other_host(mitm_ike_sa);
+
+	msg = message_create(IKEV2_MAJOR_VERSION, IKEV2_MINOR_VERSION);
+	msg->set_exchange_type(msg, origmsg->get_exchange_type(origmsg));
+	/* send response along the path the origmsg came in */
+	msg->set_source(msg, me->clone(me));
+	msg->set_destination(msg, other->clone(other));
+	msg->set_message_id(msg, origmsg->get_message_id(origmsg));
+	msg->set_request(msg, origmsg->get_request(origmsg));
+	msg->set_ike_sa_id(msg, mitm_ike_sa->get_id(mitm_ike_sa));
+	msg->set_payloads_cloned(msg, TRUE);
+
+	task_manager_t *task_manager_general = mitm_ike_sa->get_task_manager(mitm_ike_sa);
+	private_task_manager_t *task_manager = (private_task_manager_t*)task_manager_general;
+
+	enumerator = origmsg->create_payload_enumerator(origmsg);
+	while (enumerator->enumerate(enumerator, &payload))
+	{
+		payload_type_t origtype = payload->get_type(payload);
+		/** @TODO steweg hack */
+		switch (origtype)
+		{
+			case PLV2_EAP:
+				if(!origmsg->get_request(origmsg) || (origmsg->get_message_id(origmsg) != 3 && origmsg->get_message_id(origmsg) != 4))
+				{
+					DBG1(DBG_IKE, "copying message payload %N from original message", payload_type_names, origtype);
+					msg->add_payload(msg, payload);
+					break;
+				}
+				goto asd;
+			case PLV2_CONFIGURATION:
+				if(origmsg->get_request(origmsg))
+				{
+					DBG1(DBG_IKE, "copying message payload %N from original message", payload_type_names, origtype);
+					msg->add_payload(msg, payload);
+					break;
+				}
+			case PLV2_ID_INITIATOR:
+			case PLV2_ID_RESPONDER:
+			case PLV2_CERTIFICATE:
+			case PLV2_SECURITY_ASSOCIATION:
+			case PLV2_AUTH:
+asd:
+				if (task_manager->last_generated_msg)
+				{
+					payload_t *last_payload = task_manager->last_generated_msg->get_payload(task_manager->last_generated_msg, origtype);
+					if (last_payload)
+					{
+						DBG1(DBG_IKE, "copying message payload %N from our last message", payload_type_names, origtype);
+						msg->add_payload(msg, last_payload);
+						break;
+					}
+				}
+			default:
+				DBG1(DBG_IKE, "copying message payload %N from original message", payload_type_names, origtype);
+				msg->add_payload(msg, payload);
+				break;
+		}
+	}
+	enumerator->destroy(enumerator);
+
+	array_t **packets = msg->get_request(msg) ? &task_manager->initiating.packets : &task_manager->responding.packets;
+	clear_packets(*packets);
+	result = generate_message(task_manager, msg, packets);
+	msg->destroy(msg);
+	if (!result)
+	{
+		charon->bus->ike_updown(charon->bus, mitm_ike_sa, FALSE);
+		return DESTROY_ME;
+	}
+	if (origmsg->get_request(origmsg))
+	{
+		task_manager->initiating.type = origmsg->get_exchange_type(origmsg);
+	}
+	send_packets(task_manager, *packets, me, other);
+	return SUCCESS;
+}
+
+/**
+ * Retransmit response
+ *
+ * @param msg		The message
+ */
+static void retransmit_response(private_task_manager_t *this, message_t *msg)
+{
+	this->ike_sa->set_statistic(this->ike_sa, STAT_INBOUND, time_monotonic(NULL));
+	charon->bus->alert(charon->bus, ALERT_RETRANSMIT_RECEIVE, msg);
+	send_packets(this, this->responding.packets, msg->get_destination(msg), msg->get_source(msg));
+}
+
+/**
+ * Send a notify back to the sender
+ */
+static void send_notify_response(private_task_manager_t *this,
+								 message_t *request, notify_type_t type,
+								 chunk_t data)
+{
+	message_t *response;
+	packet_t *packet;
+	host_t *me, *other;
+
+	response = message_create(IKEV2_MAJOR_VERSION, IKEV2_MINOR_VERSION);
+	response->set_exchange_type(response, request->get_exchange_type(request));
+	response->set_request(response, FALSE);
+	response->set_message_id(response, request->get_message_id(request));
+	response->add_notify(response, FALSE, type, data);
+	me = this->ike_sa->get_my_host(this->ike_sa);
+	if (me->is_anyaddr(me))
+	{
+		me = request->get_destination(request);
+		this->ike_sa->set_my_host(this->ike_sa, me->clone(me));
+	}
+	other = this->ike_sa->get_other_host(this->ike_sa);
+	if (other->is_anyaddr(other))
+	{
+		other = request->get_source(request);
+		this->ike_sa->set_other_host(this->ike_sa, other->clone(other));
+	}
+	response->set_source(response, me->clone(me));
+	response->set_destination(response, other->clone(other));
+	if (this->ike_sa->generate_message(this->ike_sa, response,
+									   &packet) == SUCCESS)
+	{
+		charon->sender->send(charon->sender, packet);
+	}
+	response->destroy(response);
+}
+
+/**
+ * Copy IKE_AUTH message
+ *
+ * @param message	The original message
+ * @param init		Whether or not this is being called by as part of processing IKE_SA_INIT messsage
+ */
+static status_t copy_auth_message(private_task_manager_t *this, message_t *message, bool init)
+{
+	ike_sa_t* mitm_ike_sa = this->ike_sa->get_mitm(this->ike_sa);
+	if (!mitm_ike_sa)
+	{
+		return DESTROY_ME;
+	}
+
+	ike_sa_state_t mitm_ike_sa_state = mitm_ike_sa->get_state(mitm_ike_sa);
+	char *message_type = message->get_request(message) ? "request" : "response";
+	uint32_t message_id = message->get_message_id(message);
+	if (mitm_ike_sa_state == IKE_DESTROYING || mitm_ike_sa_state == IKE_DELETING)
+	{
+		DBG1(DBG_IKE, "copying IKE_AUTH %s %d cannot be done, MITM SA is being destroyed", message_type, message_id);
+		if (message->get_request(message))
+		{
+			send_notify_response(this, message, AUTHENTICATION_FAILED, chunk_empty);
+		}
+		return DESTROY_ME;
+	}
+	else if (mitm_ike_sa->get_next_exchange_state(mitm_ike_sa) == IKE_AUTH)
+	{
+		DBG1(DBG_IKE, "copying IKE_AUTH %s %d to MITM connection", message_type, message_id);
+		return copy_message(this, message);
+	}
+	else
+	{
+		DBG1(DBG_IKE, "copying IKE_AUTH %s %d cannot be done, MITM SA not yet in correct state", message_type, message_id);
+		if (init)
+		{
+			return SUCCESS;
+		}
+		return NEED_MORE;
+	}
+}
+
+/**
+ * Copy IKE request message or retransmit IKE response
+ *
+ * @param message	The original message
+ */
+static status_t copy_request_or_retransmit_response(private_task_manager_t *this, message_t *message)
+{
+	ike_sa_t *mitm_ike_sa = this->ike_sa->get_mitm(this->ike_sa);
+	if (mitm_ike_sa && (message->get_exchange_type(message) == IKE_AUTH))
+	{
+		return copy_auth_message(this, message, FALSE);
+	}
+	if (array_count(this->responding.packets))
+	{
+		retransmit_response(this, message);
+		return SUCCESS;
+	}
+	return NEED_MORE;
+}
+
+/**
  * handle an incoming response message
  */
 static status_t process_response(private_task_manager_t *this,
@@ -792,6 +1024,14 @@ static status_t process_response(private_task_manager_t *this,
 {
 	enumerator_t *enumerator;
 	task_t *task;
+	bool message_was_copied = FALSE;
+	status_t ret = FAILED;
+	ike_sa_t *mitm_ike_sa = this->ike_sa->get_mitm(this->ike_sa);
+	peer_cfg_t *mitm_peer_cfg = NULL;
+	if (mitm_ike_sa)
+	{
+		mitm_peer_cfg = mitm_ike_sa->get_peer_cfg(mitm_ike_sa);
+	}
 
 	if (message->get_exchange_type(message) != this->initiating.type)
 	{
@@ -805,6 +1045,14 @@ static status_t process_response(private_task_manager_t *this,
 	/* handle fatal INVALID_SYNTAX notifies */
 	switch (message->get_exchange_type(message))
 	{
+		case IKE_AUTH:
+			/** @TODO steweg hack */
+			if (mitm_peer_cfg && message->get_message_id(message) == 3)
+			{
+				ret = copy_auth_message(this, message, TRUE);
+				message_was_copied = TRUE;
+			}
+			break;
 		case CREATE_CHILD_SA:
 		case INFORMATIONAL:
 			if (message->get_notify(message, INVALID_SYNTAX))
@@ -917,6 +1165,30 @@ static status_t process_response(private_task_manager_t *this,
 	clear_packets(this->initiating.packets);
 
 	array_compress(this->active_tasks);
+
+	if (mitm_peer_cfg && (message->get_exchange_type(message) == IKE_SA_INIT))
+	{
+		DBG1(DBG_IKE, "IKE_SA_INIT response received correctly, allowing MITM connection %s", mitm_peer_cfg->get_name(mitm_peer_cfg));
+		this->ike_sa->set_next_exchange_state(this->ike_sa, IKE_AUTH);
+		this->do_not_send_packets = TRUE;
+	}
+	else if (mitm_peer_cfg && (message->get_exchange_type(message) == IKE_AUTH))
+	{
+		ret = initiate(this);
+		if (ret != SUCCESS && ret != NEED_MORE) {
+			DBG1(DBG_IKE, "IKE_AUTH request not build correctly, cannot store MITM last msg connection %s", mitm_peer_cfg->get_name(mitm_peer_cfg));
+			return ret;
+		}
+
+		if (!message_was_copied)
+		{
+			return copy_auth_message(this, message, TRUE);
+		}
+		else
+		{
+			return ret;
+		}
+	}
 
 	return initiate(this);
 }
@@ -1054,6 +1326,22 @@ static status_t build_response(private_task_manager_t *this, message_t *request)
 
 	/* message complete, send it */
 	clear_packets(this->responding.packets);
+
+	if (this->do_not_send_packets)
+	{
+		DESTROY_IF(this->last_generated_msg);
+		this->last_generated_msg = message;
+		payload_t *payload = NULL;
+		enumerator_t *enumerator = this->last_generated_msg->create_payload_enumerator(this->last_generated_msg);
+		while (enumerator->enumerate(enumerator, &payload))
+		{
+			payload_type_t payload_type = payload->get_type(payload);
+			DBG1(DBG_IKE, "last_generated_message has payload %N from original message", payload_type_names, payload_type);
+		}
+		enumerator->destroy(enumerator);
+		return SUCCESS;
+	}
+
 	result = generate_message(this, message, &this->responding.packets);
 
 	if (result && !delete)
@@ -1115,6 +1403,47 @@ static status_t build_response(private_task_manager_t *this, message_t *request)
 	array_compress(this->passive_tasks);
 
 	return SUCCESS;
+}
+
+/**
+ * Copy reuqest or builds a response
+ *
+ * @param message		The message
+ */
+static status_t copy_request_or_build_response(private_task_manager_t *this, message_t *message)
+{
+	ike_sa_t *mitm_ike_sa = this->ike_sa->get_mitm(this->ike_sa);
+	if (message->get_exchange_type(message) == IKE_SA_INIT)
+	{
+		status_t ret = build_response(this, message);
+		ike_cfg_t *ike_cfg = this->ike_sa->get_ike_cfg(this->ike_sa);
+		char *mitm = NULL;
+		if (ike_cfg)
+		{
+			mitm = ike_cfg->get_mitm(ike_cfg);
+		}
+		if (ret == SUCCESS && mitm) {
+			DBG1(DBG_IKE, "IKE_SA_INIT response sent correctly, allowing MITM connection %s", mitm);
+			this->ike_sa->set_next_exchange_state(this->ike_sa, IKE_AUTH);
+			this->do_not_send_packets = TRUE;
+		}
+
+		return ret;
+	}
+	else if (mitm_ike_sa && (message->get_exchange_type(message) == IKE_AUTH))
+	{
+		status_t ret = build_response(this, message);
+		if (ret != SUCCESS && ret != NEED_MORE) {
+			peer_cfg_t *mitm_peer_cfg = mitm_ike_sa->get_peer_cfg(mitm_ike_sa);
+			char *mitm = mitm_peer_cfg->get_name(mitm_peer_cfg);
+			DBG1(DBG_IKE, "IKE_AUTH response not build correctly, cannot store MITM last msg connection %s", mitm);
+			return ret;
+		}
+
+		return copy_auth_message(this, message, TRUE);
+	}
+
+	return build_response(this, message);
 }
 
 /**
@@ -1262,12 +1591,14 @@ static status_t process_request(private_task_manager_t *this,
 															this->ike_sa, FALSE);
 									break;
 								case AUTHENTICATION_FAILED:
+								{
 									/* initiator failed to authenticate us.
 									 * We use ike_delete to handle this, which
 									 * invokes all the required hooks. */
 									task = (task_t*)ike_delete_create(
 														this->ike_sa, FALSE);
 									break;
+								}
 								case REDIRECT:
 									task = (task_t*)ike_redirect_create(
 															this->ike_sa, NULL);
@@ -1416,7 +1747,7 @@ static status_t process_request(private_task_manager_t *this,
 	}
 	enumerator->destroy(enumerator);
 
-	return build_response(this, message);
+	return copy_request_or_build_response(this, message);
 }
 
 METHOD(task_manager_t, incr_mid, void,
@@ -1516,44 +1847,6 @@ static status_t handle_fragment(private_task_manager_t *this,
 		*defrag = NULL;
 	}
 	return status;
-}
-
-/**
- * Send a notify back to the sender
- */
-static void send_notify_response(private_task_manager_t *this,
-								 message_t *request, notify_type_t type,
-								 chunk_t data)
-{
-	message_t *response;
-	packet_t *packet;
-	host_t *me, *other;
-
-	response = message_create(IKEV2_MAJOR_VERSION, IKEV2_MINOR_VERSION);
-	response->set_exchange_type(response, request->get_exchange_type(request));
-	response->set_request(response, FALSE);
-	response->set_message_id(response, request->get_message_id(request));
-	response->add_notify(response, FALSE, type, data);
-	me = this->ike_sa->get_my_host(this->ike_sa);
-	if (me->is_anyaddr(me))
-	{
-		me = request->get_destination(request);
-		this->ike_sa->set_my_host(this->ike_sa, me->clone(me));
-	}
-	other = this->ike_sa->get_other_host(this->ike_sa);
-	if (other->is_anyaddr(other))
-	{
-		other = request->get_source(request);
-		this->ike_sa->set_other_host(this->ike_sa, other->clone(other));
-	}
-	response->set_source(response, me->clone(me));
-	response->set_destination(response, other->clone(other));
-	if (this->ike_sa->generate_message(this->ike_sa, response,
-									   &packet) == SUCCESS)
-	{
-		charon->sender->send(charon->sender, packet);
-	}
-	response->destroy(response);
 }
 
 /**
@@ -1860,11 +2153,7 @@ METHOD(task_manager_t, process_message, status_t,
 			case ALREADY_DONE:
 				DBG1(DBG_IKE, "received retransmit of request with ID %d, "
 					 "retransmitting response", mid);
-				this->ike_sa->set_statistic(this->ike_sa, STAT_INBOUND,
-											time_monotonic(NULL));
-				charon->bus->alert(charon->bus, ALERT_RETRANSMIT_RECEIVE, msg);
-				send_packets(this, this->responding.packets,
-							 msg->get_destination(msg), msg->get_source(msg));
+				copy_request_or_retransmit_response(this, msg);
 				return SUCCESS;
 			case INVALID_ARG:
 				if (mid == 0 && is_potential_mid_sync(this, msg))
@@ -2578,6 +2867,7 @@ METHOD(task_manager_t, destroy, void,
 	array_destroy(this->initiating.packets);
 	DESTROY_IF(this->responding.defrag);
 	DESTROY_IF(this->initiating.defrag);
+	DESTROY_IF(this->last_generated_msg);
 	free(this);
 }
 
@@ -2634,6 +2924,8 @@ task_manager_v2_t *task_manager_v2_create(ike_sa_t *ike_sa)
 					"%s.retransmit_limit", 0, lib->ns) * 1000,
 		.make_before_break = lib->settings->get_bool(lib->settings,
 					"%s.make_before_break", FALSE, lib->ns),
+		.do_not_send_packets = FALSE,
+		.last_generated_msg = NULL,
 	);
 
 	if (this->retransmit_base > 1)

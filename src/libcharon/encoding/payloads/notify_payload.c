@@ -516,13 +516,18 @@ METHOD(payload_t, verify, status_t,
 			break;
 		}
 		case ME_ENDPOINT:
-			if (this->notify_data.len != 8 &&
+		{
+			bool cisco_anyconnect = lib->settings->get_bool(lib->settings, "%s.%s", FALSE,
+									   lib->ns, "cisco_anyconnect");
+			if (!cisco_anyconnect &&
+				this->notify_data.len != 8 &&
 				this->notify_data.len != 12 &&
 				this->notify_data.len != 24)
 			{
 				bad_length = TRUE;
 			}
 			break;
+		}
 		case ME_CONNECTID:
 			if (this->notify_data.len < 4 ||
 				this->notify_data.len > 16)

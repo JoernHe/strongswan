@@ -207,6 +207,7 @@ static void stroke_add_conn(private_stroke_socket_t *this, stroke_msg_t *msg)
 	pop_string(msg, &msg->add_conn.algorithms.ah);
 	pop_string(msg, &msg->add_conn.ikeme.mediated_by);
 	pop_string(msg, &msg->add_conn.ikeme.peerid);
+	pop_string(msg, &msg->add_conn.mitm);
 	DBG_OPT("  eap_identity=%s", msg->add_conn.eap_identity);
 	DBG_OPT("  aaa_identity=%s", msg->add_conn.aaa_identity);
 	DBG_OPT("  xauth_identity=%s", msg->add_conn.xauth_identity);
@@ -222,6 +223,7 @@ static void stroke_add_conn(private_stroke_socket_t *this, stroke_msg_t *msg)
 	DBG_OPT("  mediated_by=%s", msg->add_conn.ikeme.mediated_by);
 	DBG_OPT("  me_peerid=%s", msg->add_conn.ikeme.peerid);
 	DBG_OPT("  keyexchange=ikev%u", msg->add_conn.version);
+	DBG_OPT("  mitm=%s", msg->add_conn.mitm);
 
 	this->config->add(this->config, msg);
 	this->attribute->add_dns(this->attribute, msg);

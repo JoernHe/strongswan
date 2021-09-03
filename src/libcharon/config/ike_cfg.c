@@ -120,6 +120,11 @@ struct private_ike_cfg_t {
 	 * List of proposals to use
 	 */
 	linked_list_t *proposals;
+
+	/**
+	 * Name of connection that will be triggered if in MITM mode
+	 */
+	char *mitm;
 };
 
 METHOD(ike_cfg_t, get_version, ike_version_t,
@@ -419,6 +424,12 @@ METHOD(ike_cfg_t, destroy, void,
 										offsetof(traffic_selector_t, destroy));
 		this->other_ranges->destroy_offset(this->other_ranges,
 										offsetof(traffic_selector_t, destroy));
+		if (this->mitm)
+		{
+			free(this->mitm);
+		}
+
+		this->mitm = NULL;
 		free(this);
 	}
 }
@@ -576,6 +587,12 @@ bool ike_cfg_has_address(ike_cfg_t *cfg, host_t *addr, bool local)
 	return found;
 }
 
+METHOD(ike_cfg_t, get_mitm, char*,
+	private_ike_cfg_t *this)
+{
+	return this->mitm;
+}
+
 /*
  * Described in header
  */
@@ -607,6 +624,7 @@ ike_cfg_t *ike_cfg_create(ike_cfg_create_t *data)
 			.equals = _equals,
 			.get_ref = _get_ref,
 			.destroy = _destroy,
+			.get_mitm = _get_mitm,
 		},
 		.refcount = 1,
 		.version = data->version,
@@ -624,6 +642,7 @@ ike_cfg_t *ike_cfg_create(ike_cfg_create_t *data)
 		.other_port = data->remote_port,
 		.dscp = data->dscp,
 		.proposals = linked_list_create(),
+		.mitm = strdupnull(data->mitm),
 	);
 
 	parse_addresses(data->local, this->my_hosts, this->my_ranges);

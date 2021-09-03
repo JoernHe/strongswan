@@ -277,7 +277,19 @@ static ike_cfg_t *build_ike_cfg(private_stroke_config_t *this, stroke_msg_t *msg
 		.force_encap = msg->add_conn.force_encap,
 		.fragmentation = msg->add_conn.fragmentation,
 		.dscp = msg->add_conn.ikedscp,
+		.mitm = msg->add_conn.mitm,
 	};
+
+	if (msg->add_conn.mitm)
+	{
+		peer_cfg_t *mitm_peer_cfg = charon->backends->get_peer_cfg_by_name(charon->backends, msg->add_conn.mitm);
+		if (mitm_peer_cfg == NULL)
+		{
+			DBG1(DBG_CFG, "MITM connection not found");
+			return NULL;
+		}
+	}
+
 	if (msg->add_conn.me.allow_any)
 	{
 		snprintf(me, sizeof(me), "%s,0.0.0.0/0,::/0",
@@ -650,6 +662,7 @@ static peer_cfg_t *build_peer_cfg(private_stroke_config_t *this,
 {
 	peer_cfg_t *peer_cfg;
 	auth_cfg_t *auth_cfg;
+
 	peer_cfg_create_t peer = {
 		.cert_policy = msg->add_conn.me.sendcert,
 		.keyingtries = msg->add_conn.rekey.tries,
@@ -657,7 +670,7 @@ static peer_cfg_t *build_peer_cfg(private_stroke_config_t *this,
 		.aggressive = msg->add_conn.aggressive,
 		.push_mode = msg->add_conn.pushmode,
 		.dpd = msg->add_conn.dpd.delay,
-		.dpd_timeout = msg->add_conn.dpd.timeout,
+		.dpd_timeout = msg->add_conn.dpd.timeout
 	};
 
 #ifdef ME
@@ -725,7 +738,6 @@ static peer_cfg_t *build_peer_cfg(private_stroke_config_t *this,
 	 * the pool name as the connection name, which the attribute provider
 	 * uses to serve pool addresses. */
 	peer_cfg = peer_cfg_create(msg->add_conn.name, ike_cfg, &peer);
-
 	if (msg->add_conn.other.sourceip)
 	{
 		enumerator_t *enumerator;

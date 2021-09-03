@@ -214,6 +214,7 @@ int starter_stroke_add_conn(starter_config_t *cfg, starter_conn_t *conn)
 	msg->add_conn.unique = cfg->setup.uniqueids;
 	push_string(&msg, add_conn.algorithms.ike, conn->ike);
 	push_string(&msg, add_conn.algorithms.esp, conn->esp);
+	push_string(&msg, add_conn.mitm, conn->mitm);
 	push_string(&msg, add_conn.algorithms.ah, conn->ah);
 	msg->add_conn.dpd.delay = conn->dpd_delay;
 	msg->add_conn.dpd.timeout = conn->dpd_timeout;

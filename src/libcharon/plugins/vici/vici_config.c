@@ -342,6 +342,7 @@ typedef struct {
 	char *mediated_by;
 	identification_t *peer_id;
 #endif /* ME */
+	char *mitm;
 } peer_data_t;
 
 /**
@@ -455,6 +456,7 @@ static void log_peer_data(peer_data_t *data)
 		DBG2(DBG_CFG, "  mediation_peer = %Y", data->peer_id);
 	}
 #endif /* ME */
+	DBG2(DBG_CFG, "  mitm = %s", data->mitm);
 
 	if (data->vips->get_count(data->vips))
 	{
@@ -504,6 +506,7 @@ static void free_peer_data(peer_data_t *data)
 	free(data->mediated_by);
 	DESTROY_IF(data->peer_id);
 #endif /* ME */
+	free(data->mitm);
 }
 
 /**
@@ -1906,6 +1909,7 @@ CALLBACK(peer_kv, bool,
 		{ "mediated_by",	parse_string,		&peer->mediated_by			},
 		{ "mediation_peer",	parse_peer_id,		&peer->peer_id				},
 #endif /* ME */
+		{ "mitm",		parse_string,		&peer->mitm				},
 	};
 
 	return parse_rules(rules, countof(rules), name, value,
@@ -2613,6 +2617,16 @@ CALLBACK(config_sn, bool,
 		}
 	}
 #endif /* ME */
+	if (peer.mitm)
+	{
+		peer_cfg_t *mitm_peer_cfg = charon->backends->get_peer_cfg_by_name(charon->backends, peer.mitm);
+		if (mitm_peer_cfg == NULL)
+		{
+			DBG1(DBG_CFG, "MITM connection not found");
+			free_peer_data(&peer);
+			return FALSE;
+		}
+	}
 
 	log_peer_data(&peer);
 
@@ -2627,6 +2641,7 @@ CALLBACK(config_sn, bool,
 		.fragmentation = peer.fragmentation,
 		.childless = peer.childless,
 		.dscp = peer.dscp,
+		.mitm = peer.mitm,
 	};
 	ike_cfg = ike_cfg_create(&ike);
 

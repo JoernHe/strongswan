@@ -159,6 +159,7 @@ static const token_info_t token_info[] =
 	{ ARG_MISC, 0, NULL  /* KW_REAUTH */                                           },
 	{ ARG_STR,  offsetof(starter_conn_t, ike), NULL                                },
 	{ ARG_STR,  offsetof(starter_conn_t, esp), NULL                                },
+	{ ARG_STR,  offsetof(starter_conn_t, mitm), NULL                               },
 	{ ARG_STR,  offsetof(starter_conn_t, ah), NULL                                 },
 	{ ARG_TIME, offsetof(starter_conn_t, dpd_delay), NULL                          },
 	{ ARG_TIME, offsetof(starter_conn_t, dpd_timeout), NULL                        },
