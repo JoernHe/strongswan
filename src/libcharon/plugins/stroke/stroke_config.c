@@ -419,6 +419,7 @@ static auth_cfg_t *build_auth_cfg(private_stroke_config_t *this,
 		enumerator_t *enumerator;
 		bool has_subject = FALSE;
 		certificate_t *first = NULL;
+		certificate_t *last = NULL;
 
 		enumerator = enumerator_create_token(cert, ",", " ");
 		while (enumerator->enumerate(enumerator, &cert))
@@ -426,7 +427,22 @@ static auth_cfg_t *build_auth_cfg(private_stroke_config_t *this,
 			certificate = this->cred->load_peer(this->cred, cert);
 			if (certificate)
 			{
-				cfg->add(cfg, AUTH_RULE_SUBJECT_CERT, certificate);
+				if (last && last->issued_by(last, certificate, NULL))
+				{
+					if (certificate->issued_by(certificate, certificate, NULL))
+					{
+						cfg->add(cfg, AUTH_RULE_CA_CERT, certificate);
+					}
+					else
+					{
+						cfg->add(cfg, AUTH_RULE_IM_CERT, certificate);
+					}
+				}
+				else
+				{
+					cfg->add(cfg, AUTH_RULE_SUBJECT_CERT, certificate);
+				}
+
 				if (!first)
 				{
 					first = certificate;
@@ -436,6 +452,7 @@ static auth_cfg_t *build_auth_cfg(private_stroke_config_t *this,
 				{
 					has_subject = TRUE;
 				}
+				last = certificate;
 			}
 		}
 		enumerator->destroy(enumerator);
