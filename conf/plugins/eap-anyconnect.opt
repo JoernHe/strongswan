@@ -1,0 +1,146 @@
+charon.plugins.eap-anyconnect.<client_conn_name>.version = 4.9.01095
+	Version of eap-anyconnect client that will be used within eap-anyconnect XML
+
+charon.plugins.eap-anyconnect.<client_conn_name>.device-id.computer-name = MyPC1
+	Computer name that will be used within eap-anyconnect XML
+
+charon.plugins.eap-anyconnect.<client_conn_name>.device-id.device-type = PC Vendor Notebook G1
+	Device type that will be used within eap-anyconnect XML
+
+charon.plugins.eap-anyconnect.<client_conn_name>.device-id.platform-version = 10.0.18363
+	Platform version that will be used within eap-anyconnect XML.
+
+charon.plugins.eap-anyconnect.<client_conn_name>.device-id.unique-id = 6670710BAE51885EDEF982FC59BAC8321D0AEE1036A3005FCDF996E19AEF6978
+	Unique ID that will be used within eap-anyconnect XML. These values
+	are being created by standard Cisco AnyConnect client by proprietary
+	algorithms.
+
+charon.plugins.eap-anyconnect.<client_conn_name>.device-id.unique-id-global = CC182A13D1990CF18436AeDEc8891122345EFD7D
+	Global unique ID that will be used within eap-anyconnect XML. These values
+	are being created by standard Cisco AnyConnect client by proprietary
+	algorithms.
+
+charon.plugins.eap-anyconnect.<client_conn_name>.device-id.value = win
+	Device type value. Use one of the following "win", "mac" or "linux"
+
+charon.plugins.eap-anyconnect.<client_conn_name>.mac-address = 82-00-11-aa-bb-cc
+	Comma separated list of MAC interfaces. The first one will be marked as primary,
+	meaning it is used for establishing IPSec connectivity.
+
+charon.plugins.eap-anyconnect.<client_conn_name>.group-access = Tunnel-Group1
+	Group access setting from Cisco AnyConnect client XML configuration file.
+
+charon.plugins.eap-anyconnect.<client_conn_name>.opaque.tunnel-group = Tunnel-Group1
+	Optional tunnel group setting as coming from Secure Gateway (Cisco ASA)
+
+charon.plugins.eap-anyconnect.<client_conn_name>.opaque.config-hash = 162340012345659
+	Optional configuration hash setting as coming from Secure Gateway (Cisco ASA)
+
+charon.plugins.eap-anyconnect.<client_conn_name>.auth-method =
+	Optional comma separated client supported auth methods. None is needed to support
+	RSA certification based authentication. Can be any string, but well know values
+	are: multiple-cert, single-sign-on, single-sign-on-v2
+
+charon.plugins.eap-anyconnect.<client_conn_name>.csd-wrapper = /usr/sbin/csd-wrapper-strongswan.sh
+	CSD wrapper file that will be trggered to emulate CSD process of eap-anyconnect client.
+	The CSD wrapper must support the following command line options "-host <host> -ticket <ticket>".
+	Script must generate needed XML output in order to pass CSD checks defined on Secure Gateway (Cisco ASA).
+	An example of such script can be found within scripts directory
+
+charon.plugins.eap-anyconnect.<server_conn_name>.opaque.tunnel-group = Tunnel-Group1
+	Mandatory tunnel group setting as will be send to clients
+
+charon.plugins.eap-anyconnect.<server_conn_name>.opaque.config-hash = 162340012345659
+	Mandatory configuration hash setting as will be send to clients
+
+charon.plugins.eap-anyconnect.<server_conn_name>.host-scan.base-uri = /CACHE
+	Base URI for host-scan/CSD process.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.host-scan.wait-uri = /+CSCOE+/sdesktop/wait.html
+	Wait URI for host-scan/CSD process.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.host-scan.token-xml-file = /root/csd/+CSCOE+/sdesktop/token.xml
+	Token XML file, that is being modified by server, before the client triggers CSD process.
+	Currently multiple clients are supported, but authentication is not suppported to be done in parallel.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.vpn-profile-manifest.<fileID>.service-type = vpn-mgmt
+	Service type of file instance described within VPN profile manifest. Allowed values are not limited,
+	but well known are only vpn-mgmt and user.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.vpn-profile-manifest.<fileID>.uri = /CACHE/stc/profiles/profile1.xml
+	URI of file instance described within VPN profile manifest. This XML includes the whole configuration for original
+	Cisco AnyConnect clients.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.vpn-profile-manifest.<fileID>.hash-type = sha1
+	Hash type of file instance described within VPN profile manifest. Allowed values are not limited,
+	but well known are only md5 and sha1.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.vpn-profile-manifest.<fileID>.hash = DF4918ED9173A03C31794CEAFD109419EAA1DC1E
+	Hash of the file instnce described wihtin VPN profile manifest. This hash mush be in uppercase format,
+	and of hash-type type.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.service-profiles.<profileID>.service-type = user
+	The service type of service profile instance. Allowed values are not limited, but well known is only user.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.service-profiles.<profileID>.file =
+	The optional file of service profile instance.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.service-profiles.<profileID>.extension = xml
+	The extension of service profile instance.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.service-profiles.<profileID>.derived-extension = xml
+	The optional derived extension of service profile instance.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.service-profiles.<profileID>.directory =
+	The optional directory of service profile instance.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.service-profiles.<profileID>.deploy-directory =
+	The optional deploy directory of service profile instance.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.service-profiles.<profileID>.description = AnyConnect VPN Profile
+	The description of service profile instance.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.service-profiles.<profileID>.download-remove-empty = false
+	Whether or not the download and remote empty for assigned service profile instance.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.vpn-core-manifest.<fileID>.version = 4.9.01095
+	The version of file instance within VPN core manifest.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.vpn-core-manifest.<fileID>.id = VPNCore
+	The ID of file instance within VPN core manifest.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.vpn-core-manifest.<fileID>.is-core = yes
+	Whether or not this is core file instance within VPN core manifest.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.vpn-core-manifest.<fileID>.type = exe
+	The type of file instance within VPN core manifest.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.vpn-core-manifest.<fileID>.action = install
+	The action that should be done with the file instance within VPN core manifest.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.vpn-core-manifest.<fileID>.os = win:6.1.7601
+	The OS for which the file is for. The syntax is <OS>:<min_version>. The <OS> is one of
+	the values "win", "mac" or "linux". <min_version> is minimum version of given OS
+
+charon.plugins.eap-anyconnect.<server_conn_name>.vpn-core-manifest.<fileID>.uri = binaries/anyconnect-win-4.9.01095-core-vpn-webdeploy-k9.exe
+	The URI of file instnce within VPN core manifest.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.vpn-core-manifest.<fileID>.display-name = AnyConnect Secure Mobility Client
+	The display name of file instnce within VPN core manifest.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.dynamic-split-exclude-domains = domain1.org,domain2.org
+	The comma separated list of domains that will be excluded by DNS split tunneling. Everything else will be forced
+	to use DNS servers from VPN configuration.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.base-package-uri = /CACHE/stc/2
+	The base packege URI.
+
+charon.plugins.eap-anyconnect.<server_conn_name>.pkgversion = 4,9,01095
+	The package version. The version string separator must be comma
+
+charon.plugins.eap-anyconnect.<server_conn_name>.csport = 443
+	At which port the server will accept HTTPS connections
+
+charon.plugins.eap-anyconnect.<server_conn_name>.crypto-supported = ssl-dhe
+	What crypto is being supported by server side. Any value is allowed, but only "ssl-dhe"
+	is considered well-know.

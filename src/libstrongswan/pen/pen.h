@@ -38,6 +38,7 @@ typedef struct pen_type_t pen_type_t;
 enum pen_t {
 	PEN_IETF =			0x000000,	/*        0 */
 	PEN_IBM =			0x000002,	/*        2 */
+	PEN_CISCO =			0x000009,	/*        9 */
 	PEN_MICROSOFT =		0x000137,	/*      311 */
 	PEN_REDHAT =		0x000908,	/*     2312 */
 	PEN_PWG =			0x000A8B,	/*     2699 */

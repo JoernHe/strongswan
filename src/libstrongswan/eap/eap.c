@@ -65,7 +65,9 @@ ENUM_NEXT(eap_type_names, EAP_EXPANDED, EAP_DYNAMIC, EAP_PT_EAP,
 	"EAP_EXPERIMENTAL",
 	"EAP_RADIUS",
 	"EAP_DYNAMIC");
-ENUM_END(eap_type_names, EAP_DYNAMIC);
+ENUM_NEXT(eap_type_names, EAP_ANYCONNECT, EAP_ANYCONNECT, EAP_DYNAMIC,
+	"EAP_ANYCONNECT");
+ENUM_END(eap_type_names, EAP_ANYCONNECT);
 
 ENUM_BEGIN(eap_type_short_names, EAP_IDENTITY, EAP_GTC,
 	"ID",
@@ -96,7 +98,9 @@ ENUM_NEXT(eap_type_short_names, EAP_EXPANDED, EAP_DYNAMIC, EAP_PT_EAP,
 	"XP",
 	"RAD",
 	"DYN");
-ENUM_END(eap_type_short_names, EAP_DYNAMIC);
+ENUM_NEXT(eap_type_short_names, EAP_ANYCONNECT, EAP_ANYCONNECT, EAP_DYNAMIC,
+	"ANY");
+ENUM_END(eap_type_short_names, EAP_ANYCONNECT);
 
 /*
  * See header
@@ -122,6 +126,7 @@ eap_type_t eap_type_from_string(char *name)
 		{"pt",			EAP_PT_EAP},
 		{"dynamic",		EAP_DYNAMIC},
 		{"radius",		EAP_RADIUS},
+		{"anyconnect",		EAP_ANYCONNECT},
 	};
 
 	for (i = 0; i < countof(types); i++)
@@ -142,6 +147,7 @@ pen_t eap_vendor_by_eap_type(eap_type_t type)
 		pen_t vendor;
 	} types[] = {
 		{EAP_EXPANDED, PEN_UNASSIGNED},
+		{EAP_ANYCONNECT, PEN_CISCO},
 	};
 
 	for (i = 0; i < countof(types); i++)
@@ -165,6 +171,7 @@ pen_t eap_vendor_from_string(char *name)
 		pen_t vendor;
 	} types[] = {
 		{"undefined", PEN_UNASSIGNED},
+		{"cisco", PEN_CISCO},
 	};
 
 	for (i = 0; i < countof(types); i++)

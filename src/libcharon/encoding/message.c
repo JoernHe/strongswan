@@ -2582,10 +2582,15 @@ static status_t decrypt_payloads(private_message_t *this, keymat_t *keymat)
 			if ((!rule || rule->encrypted) &&
 				!accept_unencrypted_mm(this, type))
 			{
-				DBG1(DBG_ENC, "payload type %N was not encrypted",
-					 payload_type_names, type);
-				status = FAILED;
-				break;
+				bool cisco_anyconnect = lib->settings->get_bool(lib->settings, "%s.%s", FALSE,
+										   lib->ns, "cisco_anyconnect");
+				if (!(cisco_anyconnect && type == PLV2_CONFIGURATION))
+				{
+					DBG1(DBG_ENC, "payload type %N was not encrypted",
+						 payload_type_names, type);
+					status = FAILED;
+					break;
+				}
 			}
 		}
 		previous = payload;

@@ -159,6 +159,27 @@ struct eap_method_t {
 	 * Destroys a eap_method_t object.
 	 */
 	void (*destroy) (eap_method_t *this);
+
+	/**
+	 * Sets nonce used for subsequent calculation of signatures
+	 *
+	 * @param nonce			The nonce
+	 */
+	void (*set_nonce) (eap_method_t *this, chunk_t nonce);
+
+	/**
+	 * Sets IKE_SA_INIT message for subsequent calculation of signatures
+	 *
+	 * @param ike_sa_init		The IKE_SA_INIT message
+	 */
+	void (*set_ike_sa_init) (eap_method_t *this, chunk_t ike_sa_init);
+
+	/**
+	 * Sets reserved used for subsequent calculation of signatures
+	 *
+	 * @param reserved		The reserved values
+	 */
+	void (*set_reserved) (eap_method_t *this, char *reserved);
 };
 
 /**
